@@ -1,0 +1,7 @@
+FROM tiangolo/uwsgi-nginx-flask:python3.7-2020-06-08
+
+COPY web/requirements.txt /requirements.txt
+RUN pip install -r /requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple/
+COPY web /app
+
+ENV STATIC_INDEX=1
