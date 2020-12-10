@@ -143,14 +143,19 @@ class adapter(base_adapter):
             )
             self.__graph.run(cql_link)
 
-    def seed_delete(self, fp, seedid, all):
-        pass
+    def seed_delete(self, fp, seedid):
+        cql = '''
+            match (s)<-[:history*0..]-(n) where s.`seedid`='{seedid}' detach delete n
+        '''.format(
+            seedid=seedid+'-'+fp
+        )
+        self.__graph.run(cql)
 
     def seed_search(self, fp, link, key, zone, depth, from_ts, to_ts, page, page_size):
         # todo: 支持全文检索，增加过滤条件
         key_filter = ''
         if key:
-            key_filter = " with n where n.seed=~'(?ms).*%s.*' "%(quote(key))
+            key_filter = " where n.seed=~'(?ms).*%s.*' "%(quote(key))
 
         ts_filter = ''
         if 0 < from_ts:
@@ -162,7 +167,7 @@ class adapter(base_adapter):
         if link:
             for l in link:
                 seedid, *name = l
-                link_filter += ' with n where (n)-[:link{{{prop}}}]->(:seed{{seedid:"{seedid}"}}) or (n)-[:link{{{prop}}}]->()-[:version]-(:seed{{seedid:"{seedid}"}})'.format(
+                link_filter += ' where (n)-[:link{{{prop}}}]->(:seed{{seedid:"{seedid}"}}) or (n)-[:link{{{prop}}}]->()-[:version]-(:seed{{seedid:"{seedid}"}})'.format(
                     prop='name: "%s"'%(quote(name[0])) if name else '',
                     seedid=seedid
                 )
@@ -171,8 +176,14 @@ class adapter(base_adapter):
             zone_filter = '(f)-[:{zone}*0..{depth}]->()-[:own]->(n) and '.format(zone=zone, depth=depth)
         cql = '''
             merge (f:fp{{fingerprint: '{fingerprint}'}}) with f
-            match (n:seed) where (({zone_filter} n.public='True') or (f)-[:own]->(n)) {ts_filter} {link_filter} {key_filter}
-            return distinct n order by n.`{sort}` desc skip {skip} limit {page_size}
+            match (n:seed) where (({zone_filter} n.public='True') or (f)-[:own]->(n)) {ts_filter}
+            with n,f {link_filter}
+            with n,f {key_filter}
+            with f, count(n) as total
+            match (n:seed) where (({zone_filter} n.public='True') or (f)-[:own]->(n)) {ts_filter}
+            with n,f,total {link_filter}
+            with n,f,total {key_filter}
+            return distinct n, total order by n.`{sort}` desc skip {skip} limit {page_size}
         '''.format(
             depth=depth,
             fingerprint=fp,
@@ -184,12 +195,13 @@ class adapter(base_adapter):
             key_filter=key_filter,
             ts_filter=ts_filter,
         )
-        seed_list = []
+        data = dict(list=[], total=0)
 
-        for n, in self.__graph.run(cql):
-            seed_list.append(self.__loads(n['seed']))
+        for n,total in self.__graph.run(cql):
+            data['total'] = total
+            data['list'].append(self.__loads(n['seed']))
 
-        return seed_list
+        return data
 
     def seed_info(self, fp, seedid):
         cql = '''
@@ -208,7 +220,7 @@ class adapter(base_adapter):
 
         if not seed:
             return None
-        
+
         cql = '''
             match (n:seed)-[:version*0..2]-()<-[r:link]-() where n.seedid='{seedid}'
             return distinct r.name as rname

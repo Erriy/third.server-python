@@ -109,7 +109,10 @@ def api_create(fingerprint):
 @seed.route('/<string:seedid>', methods=['DELETE'])
 @verify(require=True)
 def api_delete(seedid, fingerprint):
-    pass
+    check_seedid(seedid)
+
+    adpr.seed_delete(fp=fingerprint, seedid=seedid)
+    return build_response()
 
 
 @seed.route('', methods=['GET'])
@@ -137,7 +140,7 @@ def api_search(fingerprint):
         (isinstance(page, int) and page>0, 'page 参数必须为大于0的正整数'),
         (isinstance(page_size, int) and 100>=page_size>0, 'page_size参数必须取值范围为1-100')
     )
-    sl = adpr.seed_search(
+    data = adpr.seed_search(
         key=key,
         fp=fingerprint,
         zone=zone,
@@ -148,7 +151,7 @@ def api_search(fingerprint):
         from_ts=from_ts,
         to_ts=to_ts,
     )
-    return build_response(list=sl)
+    return build_response(**data)
 
 
 @seed.route("/<string:seedid>", methods=['GET'])
