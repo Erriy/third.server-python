@@ -11,7 +11,6 @@ from functools import wraps
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s', datefmt=r'%Y-%m-%d %I:%M:%S')
 
 
-
 def retry(times=10, interval=1, description=''):
     def __wrapper(func):
         @wraps(func)
@@ -54,7 +53,6 @@ def neo4j_connect():
     password = str(os.environ.get("NEO_PASS", r"ub1JOnQcuV^rfBsr5%Ek"))
 
     Graph(host=host, port=port, auth=(user, password)).run('match (n) return n limit 1')
-
 
 
 admin_fingerprint = os.environ.get("ADMIN_FINGERPRINT", "")
