@@ -6,6 +6,8 @@ from adapter.neo4j import adapter
 
 # pubkey support relationships
 pubkey_support_relationships = ['follow', 'block']
+# 管理员指纹
+admin_fingerprint = str(os.environ.get("ADMIN_FINGERPRINT", "")).upper()
 
 
 adpr = adapter(

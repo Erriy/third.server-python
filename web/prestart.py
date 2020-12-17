@@ -16,21 +16,21 @@ def retry(times=10, interval=1, description=''):
         @wraps(func)
         def __do():
             error = ''
-            logging.info('[*]正在检查"%s"服务是否可连接'%(description))
+            logging.info('[*] 正在检查"%s"服务是否可连接'%(description))
             for i in range(times):
                 try:
                     func()
-                    logging.info('[*]"%s"服务连接测试成功'%(description))
+                    logging.info('[*] "%s"服务连接测试成功'%(description))
                     return
                 except Exception as e:
                     if i!=times-1:
-                        logging.info('[.]"%s"服务第%d次连接失败，%d秒后继续尝试'%(description, i, interval))
+                        logging.info('[.] "%s"服务第%d次连接失败，%d秒后继续尝试'%(description, i, interval))
                     else:
-                        logging.info('[.]"%s"服务第%d次连接失败'%(description, i))
+                        logging.info('[.] "%s"服务第%d次连接失败'%(description, i))
                     time.sleep(interval)
                     error = e
                     continue
-            logging.info('[!]"%s"服务无法连接，请确认后再重新启动本服务'%(description))
+            logging.info('[!] "%s"服务无法连接，请确认后再重新启动本服务'%(description))
             raise error
         return __do
     return __wrapper

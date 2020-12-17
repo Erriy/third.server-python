@@ -7,6 +7,7 @@ from flask_cors import CORS
 from web_common import ErrorMsg, build_response
 from api_pubkey import pubkey
 from api_seed import seed
+from api_admin import admin
 
 
 app = Flask("third")
@@ -42,6 +43,7 @@ def route_frontend(path):
 
 app.register_blueprint(pubkey, url_prefix="/api/pubkey")
 app.register_blueprint(seed, url_prefix="/api/seed")
+app.register_blueprint(admin, url_prefix='/api/admin')
 
 
 if __name__ == "__main__":

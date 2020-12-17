@@ -10,7 +10,7 @@ import inspect
 import tempfile
 from functools import wraps
 from flask import Blueprint, request
-from web_common import build_response, assert_not_empty, assert_check, adpr, pubkey_support_relationships
+from web_common import build_response, assert_not_empty, assert_check, adpr, pubkey_support_relationships, admin_fingerprint
 
 
 pubkey = Blueprint('pubkey', __name__)
@@ -72,7 +72,7 @@ def check_sign(sign:str, data:str):
         return verify.pubkey_fingerprint.upper(), int(verify.sig_timestamp)
 
 
-def verify(require=True):
+def verify(require=True, auth_check=lambda f: True):
     def __inner_wrapper(func):
         spec = inspect.getfullargspec(func)
         @wraps(func)
@@ -93,8 +93,11 @@ def verify(require=True):
                 # 验证nonce
                 check_nonce()
             # 如果要求签名，则必须进行身份验证
-            assert_check(not require or ''!=fingerprint, '接口要求身份签名')
-            # todo 指纹权限管理，增加管理员接口后进行判断
+            if require:
+                assert_check(
+                    (''!=fingerprint, '接口要求签名'),
+                    (auth_check(fingerprint), 401, '无权限，拒绝执行')
+                )
             # 如果函数要求指纹数据，则传递指纹信息
             if spec.varkw or "fingerprint" in spec.args:
                 kwargs.update(fingerprint=fingerprint)
@@ -119,9 +122,9 @@ def api_add():
 
     r = gpg.import_keys(pubkey)
     assert_check(len(r.fingerprints)>0, "pubkey格式有误，请确认无误后再上传")
-    fingerprint = r.fingerprints[0]
+    fingerprint = r.fingerprints[0].upper()
 
-    return build_response(fingerprint=fingerprint.upper())
+    return build_response(fingerprint=fingerprint, admin=admin_fingerprint==fingerprint)
 
 
 @pubkey.route("/<string:fingerprint>", methods=["GET"])
