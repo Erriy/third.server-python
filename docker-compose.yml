@@ -21,6 +21,7 @@ services:
             - NEO_USER=neo4j
             - NEO_PASSWD=ub1JOnQcuV^rfBsr5%Ek
             - GPG_HOME=/gpg
+            - ADMIN_FINGERPRINT=F3215C06348E28B6455F2AEDEDCF1044A9C06456
         ports:
             - 80:80
         volumes:

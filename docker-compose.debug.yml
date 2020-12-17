@@ -8,4 +8,7 @@ services:
     rds:
         ports:
             - 127.0.0.1:6379:6379
+    web:
+        environment:
+            - ADMIN_FINGERPRINT=CEDC5D8518B461B2282BB5ACE63D2CA97B6BDE9D
 

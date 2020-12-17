@@ -5,3 +5,4 @@ RUN pip install -r /requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 COPY web /app
 
 ENV STATIC_INDEX=1
+ENV ADMIN_FINGERPRINT=
