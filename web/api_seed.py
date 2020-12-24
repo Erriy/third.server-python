@@ -6,7 +6,7 @@ import time
 import string
 from flask import Blueprint, request
 from api_pubkey import verify, check_sign
-from web_common import build_response, assert_check, adpr, pubkey_support_relationships
+from web_common import build_response, assert_check, neo4j, dumps, loads, pubkey_support_relationships
 
 
 seed = Blueprint("seed", __name__)
@@ -39,7 +39,7 @@ def api_create(fingerprint):
 
     formated_seed_list = []
     for seed in j:
-        # 校验格式
+        # 校验格式 ##############################################################
         assert_check(isinstance(seed, dict), 'seed必须为字典')
         json_seed = seed['json']
         sign_list = seed['sign']
@@ -55,7 +55,6 @@ def api_create(fingerprint):
         # 判断json数据是否合法，并反序列化出object_seed
         try:
             object_seed = json.loads(json_seed)
-            seed['object'] = object_seed
         except json.decoder.JSONDecodeError:
             return build_response(400, "json数据不合法")
         # 提取update_ts信息
@@ -80,7 +79,7 @@ def api_create(fingerprint):
         )
         update_ts = meta_update['timestamp']
         # assert_check(update_ts<=time.time(), 400, '不接受来自未来的信息，请确认时间准确后再提交')
-        # seedid 是否存在
+        # seedid 是否合法
         seedid = metadata.get("id", {}).get("value")
         assert_check(isinstance(seedid, str) and len(seedid) > 20, 'id不存在或不合法')
         # 判断签名是否正常
@@ -95,14 +94,66 @@ def api_create(fingerprint):
         sha256 = hashlib.sha256(json_seed.encode('utf-8')).hexdigest().upper()
         # 计算id
         author_list.sort()
-        seed['seedid'] = seedid
-        seed['seedid_owner'] = seedid + "-" + '.'.join(author_list)
-        seed['seedid_full'] = seed['seedid'] + '-' + sha256 + '-' + str(update_ts)
+        seedid_owner = seedid + "-" + '.'.join(author_list)
+        seedid_full = seedid_owner + '-' + sha256 + '-' + str(update_ts)
 
-        formated_seed_list.append(seed)
+        # 创建数据 ##############################################################
+        set_string = '''
+            n.seedid='{seedid_owner}',
+            n.seedid_full='{seedid_full}',
+            n.update_ts={update_ts},
+            n.public='{public}',
+            n.seed='{seed}'
+        '''.format(
+            seedid_owner=seedid_owner,
+            seedid_full=seedid_full,
+            update_ts=update_ts,
+            public=public,
+            seed=dumps(dict(json=seed['json'], sign=seed['sign'], public=public))
+        )
+        # fixme: 旧数据重新上传导致旧数据重新覆盖
+        # 建立节点并删除相关关系
+        cql_seed = '''
+            merge (n:seed{{seedid: '{seedid_owner}'}})
+                on create set {set_string}
+            with n
+            merge (owner:fp{{fingerprint: '{fingerprint}'}}) with owner,n
+            merge (owner)-[r:own]->(n) with n
+            merge (v:seed{{seedid:'{seedid}'}}) with v, n
+            merge (v)-[:version]->(n)
+            with n where n.seedid_full<>'{seedid_full}'
+                create (h:history)-[:history]->(n)
+                    set h=n, {set_string}
+            with n match (n)-[r:link]->() delete r
+        '''.format(
+            seedid=seedid,
+            seedid_owner=seedid_owner,
+            seedid_full=seedid_full,
+            set_string=set_string,
+            fingerprint=fingerprint,
+        )
+        neo4j.run(cql_seed)
 
-    for seed in formated_seed_list:
-        adpr.seed_create(fingerprint, public, seed)
+        # 连接相关节点
+        _ = []
+        for i in metadata.get('link', []):
+            _.append('''
+                with distinct n merge (n1:seed{{seedid:'{target_seedid}'}}) with n, n1
+                    create (n)-[:link{{name:'{rname}'}}]->(n1)
+                '''.format(
+                    target_seedid=i['id'],
+                    rname=quote(i['name'])
+            ))
+        if _:
+            cql_link = '''
+                match (n:seed) where n.seedid='{seedid_owner}'
+                {links}
+            '''.format(
+                seedid_owner=seedid_owner,
+                links=''.join(_)
+            )
+            neo4j.run(cql_link)
+
     return build_response()
 
 
@@ -110,8 +161,13 @@ def api_create(fingerprint):
 @verify(require=True)
 def api_delete(seedid, fingerprint):
     check_seedid(seedid)
+    cql = '''
+        match (s)<-[:history*0..]-(n) where s.`seedid`='{seedid}' detach delete n
+    '''.format(
+        seedid=seedid+'-'+fingerprint
+    )
+    neo4j.run(cql)
 
-    adpr.seed_delete(fp=fingerprint, seedid=seedid)
     return build_response()
 
 
@@ -140,42 +196,81 @@ def api_search(fingerprint):
         (isinstance(page, int) and page>0, 'page 参数必须为大于0的正整数'),
         (isinstance(page_size, int) and 100>=page_size>0, 'page_size参数必须取值范围为1-100')
     )
-    data = adpr.seed_search(
-        key=key,
-        fp=fingerprint,
-        zone=zone,
+
+    # todo: 支持全文检索，增加过滤条件
+    key_filter = ''
+    if key:
+        key_filter = " where n.seed=~'(?ms).*%s.*' "%(quote(key))
+
+    ts_filter = ''
+    if 0 < from_ts:
+        ts_filter += ' and n.update_ts>%s '%(from_ts)
+    if 0 < to_ts:
+        ts_filter += ' and n.update_ts<%s '%(to_ts)
+
+    link_filter = ''
+    if link:
+        for l in link:
+            seedid, *name = l
+            link_filter += ' where (n)-[:link{{{prop}}}]->(:seed{{seedid:"{seedid}"}}) or (n)-[:link{{{prop}}}]->()-[:version]-(:seed{{seedid:"{seedid}"}})'.format(
+                prop='name: "%s"'%(quote(name[0])) if name else '',
+                seedid=seedid
+            )
+    zone_filter = ''
+    if zone:
+        zone_filter = '(f)-[:{zone}*0..{depth}]->()-[:own]->(n) and '.format(zone=zone, depth=depth)
+    cql = '''
+        merge (f:fp{{fingerprint: '{fingerprint}'}}) with f
+        match (n:seed) where (({zone_filter} n.public='True') or (f)-[:own]->(n)) {ts_filter}
+        with n,f {link_filter}
+        with n,f {key_filter}
+        with f, count(n) as total
+        match (n:seed) where (({zone_filter} n.public='True') or (f)-[:own]->(n)) {ts_filter}
+        with n,f,total {link_filter}
+        with n,f,total {key_filter}
+        return distinct n, total order by n.`{sort}` desc skip {skip} limit {page_size}
+    '''.format(
         depth=depth,
-        page=page,
+        fingerprint=fingerprint,
+        zone_filter=zone_filter,
+        sort='update_ts',
+        skip=(page-1)*page_size,
         page_size=page_size,
-        link=link,
-        from_ts=from_ts,
-        to_ts=to_ts,
+        link_filter=link_filter,
+        key_filter=key_filter,
+        ts_filter=ts_filter,
     )
+    data = dict(list=[], total=0)
+
+    for n,total in neo4j.run(cql):
+        data['total'] = total
+        data['list'].append(loads(n['seed']))
+
     return build_response(**data)
 
 
-@seed.route("/<string:seedid>", methods=['GET'])
-@verify(require=True)
-def api_info(seedid, fingerprint):
-    check_seedid(seedid)
-    data = adpr.seed_info(fingerprint, seedid)
-    if data:
-        return build_response(**data)
-    else:
-        return build_response(404, '未找到资源')
+# @seed.route("/<string:seedid>", methods=['GET'])
+# @verify(require=True)
+# def api_info(seedid, fingerprint):
+#     check_seedid(seedid)
+#     data = adpr.seed_info(fingerprint, seedid)
+#     if data:
+#         return build_response(**data)
+#     else:
+#         return build_response(404, '未找到资源')
 
 
-@seed.route('/<string:seedid>/version', methods=['GET'])
-@verify(require=True)
-def api_version(seedid, fingerprint):
-    check_seedid(seedid)
-    a = request.args
-    page = a.get('page', default=1, type=int)
-    page_size = a.get('page_size', default=20, type=int)
-    assert_check(
-        (isinstance(page, int) and page>0, 'page 参数必须为大于0的正整数'),
-        (isinstance(page_size, int) and 100>=page_size>0, 'page_size参数必须取值范围为1-100')
-    )
-    list = adpr.seed_version(fingerprint, seedid, page, page_size)
-    return build_response(list=list)
+# @seed.route('/<string:seedid>/version', methods=['GET'])
+# @verify(require=True)
+# def api_version(seedid, fingerprint):
+#     check_seedid(seedid)
+#     a = request.args
+#     page = a.get('page', default=1, type=int)
+#     page_size = a.get('page_size', default=20, type=int)
+#     assert_check(
+#         (isinstance(page, int) and page>0, 'page 参数必须为大于0的正整数'),
+#         (isinstance(page_size, int) and 100>=page_size>0, 'page_size参数必须取值范围为1-100')
+#     )
+#     list = adpr.seed_version(fingerprint, seedid, page, page_size)
+#     return build_response(list=list)
 

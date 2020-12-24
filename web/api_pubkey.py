@@ -10,7 +10,7 @@ import inspect
 import tempfile
 from functools import wraps
 from flask import Blueprint, request
-from web_common import build_response, assert_not_empty, assert_check, adpr, pubkey_support_relationships, admin_fingerprint
+from web_common import build_response, assert_not_empty, assert_check, neo4j, pubkey_support_relationships, admin_fingerprint
 
 
 pubkey = Blueprint('pubkey', __name__)
@@ -135,76 +135,76 @@ def api_get(fingerprint):
     return build_response(pubkey=pubkey)
 
 
-@pubkey.route('/relationship', methods=['PUT'])
-@verify(require=True)
-def api_add_relationship(fingerprint):
-    '''
-        seed.json {
-            "relationship": "...",
-            "fingerprint": "..."
-        }
-    '''
-    j = request.json
-    try:
-        data = json.loads(j['json'])
-    except: 
-        return build_response(400, 'json字段解析失败')
+# @pubkey.route('/relationship', methods=['PUT'])
+# @verify(require=True)
+# def api_add_relationship(fingerprint):
+#     '''
+#         seed.json {
+#             "relationship": "...",
+#             "fingerprint": "..."
+#         }
+#     '''
+#     j = request.json
+#     try:
+#         data = json.loads(j['json'])
+#     except: 
+#         return build_response(400, 'json字段解析失败')
 
-    check_fingerprint_format(data['fingerprint'])
-    assert_check(
-        data['relationship'] in pubkey_support_relationships,
-        'relationship目前仅支持'+','.join(pubkey_support_relationships)
-    )
-    fp, sig_ts = check_sign(j['sign'], j['json'])
-    assert_check(
-        (fp==fingerprint, '请求签名与携带数据签名不一致，拒绝执行'),
-        (data['fingerprint']!=fingerprint, '不能与自己建立关系，拒绝执行')
-    )
+#     check_fingerprint_format(data['fingerprint'])
+#     assert_check(
+#         data['relationship'] in pubkey_support_relationships,
+#         'relationship目前仅支持'+','.join(pubkey_support_relationships)
+#     )
+#     fp, sig_ts = check_sign(j['sign'], j['json'])
+#     assert_check(
+#         (fp==fingerprint, '请求签名与携带数据签名不一致，拒绝执行'),
+#         (data['fingerprint']!=fingerprint, '不能与自己建立关系，拒绝执行')
+#     )
 
-    adpr.fp_relationship_create(
-        fingerprint,
-        data['fingerprint'],
-        data['relationship'],
-        sig_ts,
-        j
-    )
-    return build_response()
-
-
-@pubkey.route('/<string:relationship>/<string:target_fp>', methods=['DELETE'])
-@verify(require=True)
-def api_delete_relationship(relationship, target_fp, fingerprint):
-    check_fingerprint_format(target_fp)
-    assert_check(
-        relationship in pubkey_support_relationships, 
-        'relationship目前仅支持'+','.join(pubkey_support_relationships)
-    )
-
-    adpr.fp_relationship_delete(
-        fingerprint,
-        target_fp,
-        relationship
-    )
-    return build_response()
+#     adpr.fp_relationship_create(
+#         fingerprint,
+#         data['fingerprint'],
+#         data['relationship'],
+#         sig_ts,
+#         j
+#     )
+#     return build_response()
 
 
-@pubkey.route('/<string:from_fp>/<string:relationship>', methods=['GET'])
-def api_get_relationship(from_fp, relationship):
-    a = request.args
-    page = a.get('page', default=1, type=int)
-    page_size = a.get('page_size', default=20, type=int)
+# @pubkey.route('/<string:relationship>/<string:target_fp>', methods=['DELETE'])
+# @verify(require=True)
+# def api_delete_relationship(relationship, target_fp, fingerprint):
+#     check_fingerprint_format(target_fp)
+#     assert_check(
+#         relationship in pubkey_support_relationships, 
+#         'relationship目前仅支持'+','.join(pubkey_support_relationships)
+#     )
 
-    assert_check(
-        (isinstance(page, int) and page>0, 'page 参数必须为大于0的正整数'),
-        (isinstance(page_size, int) and 100>=page_size>0, 'page_size参数必须取值范围为1-100')
-    )
+#     adpr.fp_relationship_delete(
+#         fingerprint,
+#         target_fp,
+#         relationship
+#     )
+#     return build_response()
 
-    check_fingerprint_format(from_fp)
-    assert_check(
-        relationship in pubkey_support_relationships,
-        'relationship目前仅支持'+','.join(pubkey_support_relationships)
-    )
 
-    data = adpr.fp_relationship_list(from_fp, relationship, page, page_size)
-    return build_response(**data)
+# @pubkey.route('/<string:from_fp>/<string:relationship>', methods=['GET'])
+# def api_get_relationship(from_fp, relationship):
+#     a = request.args
+#     page = a.get('page', default=1, type=int)
+#     page_size = a.get('page_size', default=20, type=int)
+
+#     assert_check(
+#         (isinstance(page, int) and page>0, 'page 参数必须为大于0的正整数'),
+#         (isinstance(page_size, int) and 100>=page_size>0, 'page_size参数必须取值范围为1-100')
+#     )
+
+#     check_fingerprint_format(from_fp)
+#     assert_check(
+#         relationship in pubkey_support_relationships,
+#         'relationship目前仅支持'+','.join(pubkey_support_relationships)
+#     )
+
+#     data = adpr.fp_relationship_list(from_fp, relationship, page, page_size)
+#     return build_response(**data)
 

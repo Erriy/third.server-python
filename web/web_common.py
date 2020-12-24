@@ -2,19 +2,21 @@
 # -*- coding=utf-8 -*-
 import json
 import os
-from adapter.neo4j import adapter
+from py2neo import Graph
+from urllib.parse import quote, unquote
 
 # pubkey support relationships
 pubkey_support_relationships = ['follow', 'block']
 # 管理员指纹
 admin_fingerprint = str(os.environ.get("ADMIN_FINGERPRINT", "")).upper()
-
-
-adpr = adapter(
+# 初始化neo4j数据库连接
+neo4j = Graph(
     host=str(os.environ.get("NEO_HOST", "127.0.0.1")),
     port=int(os.environ.get("NEO_PORT", 7687)),
-    user=str(os.environ.get("NEO_USER", "neo4j")),
-    password=str(os.environ.get("NEO_PASS", r"ub1JOnQcuV^rfBsr5%Ek"))
+    auth=(
+        str(os.environ.get("NEO_USER", "neo4j")),
+        str(os.environ.get("NEO_PASS", r"ub1JOnQcuV^rfBsr5%Ek"))
+    )
 )
 
 
@@ -61,4 +63,12 @@ def build_response(code=200, message="操作成功", headers=dict(), **kwargs):
     if kwargs:
         dret.update(data=kwargs)
     return json.dumps(dret, ensure_ascii=False), code, headers
+
+
+def dumps(obj):
+    return quote(json.dumps(obj, separators=[',', ':'], ensure_ascii=False))
+
+
+def loads(data):
+    return json.loads(unquote(data))
 
