@@ -20,9 +20,9 @@ if __name__ == "__main__":
     src = '/home/erriy/test/test.mov'
     dst = 'test'
     import time
-    s = time()
+    s = time.time()
     thumbnail(src, dst, 22, 'large', quality=70)
-    print('耗时', time() - s)
+    print('耗时', time.time() - s)
 
 
 
