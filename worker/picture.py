@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding=utf-8 -*-
 import pyheif
+import io
 from PIL import Image
 
 
-def thumbnail(src, dst, size='small', quality=100):
+def thumbnail(src_or_bytes, dst, size='small', quality=100):
     '''
         制作缩略图
-        - src：源文件路径
+        - src_or_bytes：源文件路径或bytes
         - dst：生成的缩略图路径
         - size： 'small','middle', 'large'
         - quality：质量
@@ -21,14 +22,19 @@ def thumbnail(src, dst, size='small', quality=100):
     else:
         raise 'size[%s]参数不正确'%(str(size))
 
-    ext = src.split('.')[-1].lower()
+    ext = src_or_bytes.split('.')[-1].lower() if isinstance(src_or_bytes, str) else ''
+    if isinstance(src_or_bytes, str):
+        ext = src_or_bytes.split('.')[-1].lower()
+    else:
+        ext = ''
+        src_or_bytes = io.BytesIO(src_or_bytes)
     if 'heic' == ext:
-        with open(src, 'rb') as f:
+        with open(src_or_bytes, 'rb') as f:
             data = f.read()
         i = pyheif.read_heif(data)
         im = Image.frombytes(mode=i.mode, size=i.size, data=i.data)
     else:
-        im = Image.open(src)
+        im = Image.open(src_or_bytes)
 
     width, height = im.size
 
@@ -44,7 +50,8 @@ def thumbnail(src, dst, size='small', quality=100):
 
 if __name__ == "__main__":
     src = '/home/erriy/test/IMG_3733.HEIC.jpg'
-    dst = 'test.jpg'
-    for i in ['small', 'middle', 'large']:
-        thumbnail(src, i+dst, i, 70)
+    with open(src, 'rb') as f:
+        dst = 'test.jpg'
+        for i in ['small', 'middle', 'large']:
+            thumbnail(f.read(), i+dst, i, 70)
 
