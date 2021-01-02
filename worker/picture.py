@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding=utf-8 -*-
+import pyheif
 from PIL import Image
 
 
@@ -20,7 +21,15 @@ def thumbnail(src, dst, size='small', quality=100):
     else:
         raise 'size[%s]参数不正确'%(str(size))
 
-    im = Image.open(src)
+    ext = src.split('.')[-1].lower()
+    if 'heic' == ext:
+        with open(src, 'rb') as f:
+            data = f.read()
+        i = pyheif.read_heif(data)
+        im = Image.frombytes(mode=i.mode, size=i.size, data=i.data)
+    else:
+        im = Image.open(src)
+
     width, height = im.size
 
     if width >= max_length and height >= max_length:
@@ -33,16 +42,9 @@ def thumbnail(src, dst, size='small', quality=100):
     im.resize((width, height), Image.ANTIALIAS).save(dst, quality=quality)
 
 
-
-
-
-
-
-
 if __name__ == "__main__":
     src = '/home/erriy/test/IMG_3733.HEIC.jpg'
     dst = 'test.jpg'
     for i in ['small', 'middle', 'large']:
         thumbnail(src, i+dst, i, 70)
-
 
