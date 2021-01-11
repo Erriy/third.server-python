@@ -37,9 +37,10 @@ def search(key):
 @cmd.command()
 @click.option('--rule', '-r', required=True, type=str)
 @click.option('--epid', '-e', required=True, type=str)
+@click.option('--vid', '-v', required=False, default='', type=str)
 @click.option('--download', flag_value=True, default=False)
 @click.option('--output', default='./download', help='指定下载地址')
-def episodes(rule, epid, download, output):
+def episodes(rule, epid, vid, download, output):
     results = chasers[rule].episodes(epid)
     table = PrettyTable(['name', 'rule', 'epid', 'vid'])
     for r in results:
@@ -54,7 +55,11 @@ def episodes(rule, epid, download, output):
         return
     if not os.path.exists(output):
         os.makedirs(output)
+    vid = vid.split(',')
     for r in results:
+        if vid and r['vid'] not in vid:
+            continue
+        print('downloading {}-{}.{}'.format(r['name'], epid, r['vid']))
         path = os.path.join(output, r['name'])
         url = chasers[rule].video(epid, r['vid'])
         with tqdm(total=100) as pbar:
@@ -64,7 +69,7 @@ def episodes(rule, epid, download, output):
                     percent = d.get("downloaded_bytes")/d.get('total_bytes')*100
                 pbar.update(percent)
 
-            do_download(url, path, progress)
+            do_download(url, path+'.mp4', progress)
 
 
 
