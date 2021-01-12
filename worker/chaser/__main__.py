@@ -75,5 +75,6 @@ def episodes(rule, epid, vid, download, output):
 
 
 if __name__ == "__main__":
+    # todo 借口修改为search 和download，download中可以指定下载规则
     cmd()
 
