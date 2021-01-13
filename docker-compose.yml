@@ -11,6 +11,14 @@ services:
     rds:
         image: redis:5.0.7
 
+    broadcast:
+        network_mode: host
+        build:
+            context: broadcast
+            dockerfile: dockerfile
+        environment:
+            - PORT=9999
+
     web:
         build:
             context: .
