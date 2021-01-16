@@ -55,9 +55,9 @@ def episodes(rule, epid, vid, download, output):
         return
     if not os.path.exists(output):
         os.makedirs(output)
-    vid = vid.split(',')
+    vid = list(filter(lambda x: x, vid.split(',')))
     for r in results:
-        if vid and r['vid'] not in vid:
+        if len(vid) and r['vid'] not in vid:
             continue
         print('downloading {}-{}.{}'.format(r['name'], epid, r['vid']))
         path = os.path.join(output, r['name'])
@@ -66,7 +66,7 @@ def episodes(rule, epid, vid, download, output):
             def progress(d):
                 percent = 0
                 if d.get("downloaded_bytes") and d.get('total_bytes'):
-                    percent = d.get("downloaded_bytes")/d.get('total_bytes')*100
+                    percent = d.get("downloaded_bytes")/d.get('total_bytes')
                 pbar.update(percent)
 
             do_download(url, path+'.mp4', progress)

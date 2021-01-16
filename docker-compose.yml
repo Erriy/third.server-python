@@ -17,7 +17,7 @@ services:
             context: broadcast
             dockerfile: dockerfile
         environment:
-            - PORT=9999
+            - PORT=8000
 
     web:
         build:

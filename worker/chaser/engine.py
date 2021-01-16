@@ -132,7 +132,7 @@ def load(dirname):
     return mobj_dict
 
 
-chasers = load('rules')
+chasers = load('rules/series')
 
 
 def download(url, path, cb):
