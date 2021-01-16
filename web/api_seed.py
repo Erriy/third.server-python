@@ -84,6 +84,11 @@ def api_search():
 
 @seed.route('<string:seedid>', methods=['DELETE'])
 def api_delete(seedid):
-    print(request.path)
+    cql = '''
+        match (n:seed) where n.seedid='{seedid}' detach delete n
+    '''.format(
+        seedid=seedid
+    )
+    neo4j.run(cql)
     return build_response()
 
